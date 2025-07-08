@@ -14,7 +14,7 @@ import (
 const (
 	AppName    = "syslog-sender"
 	AppVersion = "0.1.0"
-	AppAuthor  = "https://github.com/your-username/syslog-sender"
+	AppAuthor  = "https://github.com/wellsgz/syslog-sender"
 )
 
 // SyslogConfig holds the configuration for the syslog message

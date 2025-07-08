@@ -80,7 +80,7 @@ A cross-platform command-line application written in Go for sending syslog messa
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/wellsgz/syslog-sender.git
 cd syslog-sender
 
 # Build for current platform
