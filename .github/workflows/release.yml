@@ -109,10 +109,24 @@ jobs:
         find ./artifacts -type f -ls
         
         # Move all files from subdirectories to the root artifacts directory
-        find ./artifacts -mindepth 2 -type f \( -name "syslog-sender-*" -o -name "*.sha256" \) | while read file; do
-          filename=$(basename "$file")
-          echo "Moving $file to ./artifacts/$filename"
-          mv "$file" "./artifacts/$filename"
+        # Use a more careful approach to avoid duplicates
+        for subdir in ./artifacts/*/; do
+          if [ -d "$subdir" ]; then
+            echo "Processing directory: $subdir"
+            for file in "$subdir"*; do
+              if [ -f "$file" ]; then
+                filename=$(basename "$file")
+                target="./artifacts/$filename"
+                if [ ! -f "$target" ]; then
+                  echo "Moving $file to $target"
+                  mv "$file" "$target"
+                else
+                  echo "Target $target already exists, removing duplicate $file"
+                  rm -f "$file"
+                fi
+              fi
+            done
+          fi
         done
         
         # Remove empty subdirectories
