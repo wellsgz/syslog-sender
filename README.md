@@ -1,5 +1,10 @@
 # Syslog Sender Application
 
+[![CI/CD Pipeline](https://github.com/wellsgz/syslog-sender/actions/workflows/ci.yml/badge.svg)](https://github.com/wellsgz/syslog-sender/actions/workflows/ci.yml)
+[![Release](https://github.com/wellsgz/syslog-sender/actions/workflows/release.yml/badge.svg)](https://github.com/wellsgz/syslog-sender/actions/workflows/release.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/wellsgz/syslog-sender)](https://goreportcard.com/report/github.com/wellsgz/syslog-sender)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A cross-platform command-line application written in Go for sending syslog messages to remote syslog servers.
 
 ## Features
@@ -72,9 +77,27 @@ A cross-platform command-line application written in Go for sending syslog messa
 
 ## Installation
 
-### Prerequisites
+### Download Pre-built Binaries (Recommended)
 
-- Go 1.19 or later (for building from source)
+Download the latest release from the [GitHub Releases page](https://github.com/wellsgz/syslog-sender/releases/latest):
+
+- **Linux x86_64**: `syslog-sender-linux-amd64.tar.gz`
+- **Linux ARM64**: `syslog-sender-linux-arm64.tar.gz`
+- **macOS Intel**: `syslog-sender-darwin-amd64.tar.gz`
+- **macOS Apple Silicon**: `syslog-sender-darwin-arm64.tar.gz`
+- **Windows x86_64**: `syslog-sender-windows-amd64.exe.zip`
+- **FreeBSD x86_64**: `syslog-sender-freebsd-amd64.tar.gz`
+
+```bash
+# Example: Download and install Linux x86_64 binary
+curl -L https://github.com/wellsgz/syslog-sender/releases/latest/download/syslog-sender-linux-amd64.tar.gz | tar -xz
+chmod +x syslog-sender-linux-amd64
+./syslog-sender-linux-amd64 -version
+```
+
+### Prerequisites for Building
+
+- Go 1.21 or later (for building from source)
 
 ### Building from Source
 
@@ -303,14 +326,6 @@ export SYSLOG_DEBUG=1
 
 MIT License - see LICENSE file for details
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Submit a pull request
-
 ## Changelog
 
 ### Version 0.1.0 (2025-07-08)
@@ -350,4 +365,75 @@ MIT License - see LICENSE file for details
 - Messages are sent in plain text
 - No authentication mechanism
 - Consider using TLS for sensitive environments
-- Validate input parameters to prevent injection attacks 
+- Validate input parameters to prevent injection attacks
+
+## CI/CD and Release Process
+
+This project uses GitHub Actions for automated testing, building, and releasing.
+
+### Automated Workflows
+
+1. **CI/CD Pipeline** (`.github/workflows/ci.yml`)
+   - Triggers on pushes to `main` and pull requests
+   - Runs tests, formatting checks, and security scans
+   - Builds cross-platform binaries
+   - Uploads build artifacts
+
+2. **Auto-tagging** (`.github/workflows/auto-tag.yml`)
+   - Monitors changes to `main.go`
+   - Automatically creates version tags when `AppVersion` is updated
+   - Validates semantic versioning format
+   - Triggers release workflow
+
+3. **Release** (`.github/workflows/release.yml`)
+   - Triggers on version tags (e.g., `v1.0.0`)
+   - Builds cross-platform binaries with optimizations
+   - Creates GitHub releases with binaries and checksums
+   - Generates comprehensive release notes
+
+### Creating a New Release
+
+To create a new release:
+
+1. Update the version in `main.go`:
+   ```go
+   AppVersion = "1.0.1"  // Update this line
+   ```
+
+2. Commit and push to `main`:
+   ```bash
+   git add main.go
+   git commit -m "Bump version to 1.0.1"
+   git push origin main
+   ```
+
+3. The auto-tagging workflow will:
+   - Detect the version change
+   - Create a new tag `v1.0.1`
+   - Trigger the release workflow
+
+4. The release workflow will:
+   - Build binaries for all platforms
+   - Create a GitHub release
+   - Upload binaries and checksums
+
+### Build Matrix
+
+The CI/CD pipeline builds for the following platforms:
+
+| OS | Architecture | Binary Name |
+|---|---|---|
+| Linux | amd64 | `syslog-sender-linux-amd64` |
+| Linux | arm64 | `syslog-sender-linux-arm64` |
+| macOS | amd64 | `syslog-sender-darwin-amd64` |
+| macOS | arm64 | `syslog-sender-darwin-arm64` |
+| Windows | amd64 | `syslog-sender-windows-amd64.exe` |
+| FreeBSD | amd64 | `syslog-sender-freebsd-amd64` |
+
+### Quality Assurance
+
+- **Code Formatting**: Automated `go fmt` checks
+- **Static Analysis**: `go vet` and `gosec` security scanning
+- **Testing**: Unit tests with race condition detection
+- **Cross-compilation**: Ensures compatibility across platforms
+- **Binary Verification**: Automated functionality tests 

@@ -1,0 +1,199 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Release Binaries
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            filename: syslog-sender-linux-amd64
+          - os: linux
+            arch: arm64
+            filename: syslog-sender-linux-arm64
+          - os: darwin
+            arch: amd64
+            filename: syslog-sender-darwin-amd64
+          - os: darwin
+            arch: arm64
+            filename: syslog-sender-darwin-arm64
+          - os: windows
+            arch: amd64
+            filename: syslog-sender-windows-amd64.exe
+          - os: freebsd
+            arch: amd64
+            filename: syslog-sender-freebsd-amd64
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+          
+    - name: Download dependencies
+      run: go mod download
+      
+    - name: Extract version from tag
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.os }}
+        GOARCH: ${{ matrix.arch }}
+        CGO_ENABLED: 0
+      run: |
+        go build -v -ldflags="-s -w -X main.AppVersion=${{ steps.version.outputs.VERSION }}" -o ${{ matrix.filename }} .
+        
+    - name: Create archive
+      run: |
+        if [[ "${{ matrix.os }}" == "windows" ]]; then
+          zip ${{ matrix.filename }}.zip ${{ matrix.filename }}
+        else
+          tar -czf ${{ matrix.filename }}.tar.gz ${{ matrix.filename }}
+        fi
+        
+    - name: Generate checksums
+      run: |
+        if [[ "${{ matrix.os }}" == "windows" ]]; then
+          sha256sum ${{ matrix.filename }}.zip > ${{ matrix.filename }}.zip.sha256
+        else
+          sha256sum ${{ matrix.filename }}.tar.gz > ${{ matrix.filename }}.tar.gz.sha256
+        fi
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-artifacts
+        path: |
+          ${{ matrix.filename }}.*
+        retention-days: 7
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: release-artifacts
+        path: ./artifacts
+        
+    - name: Extract version from tag
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        echo "## Release Notes" > release_notes.md
+        echo "" >> release_notes.md
+        echo "### Syslog Sender v${{ steps.version.outputs.VERSION }}" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "Cross-platform syslog message sender with the following features:" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "- **UDP and TCP transport support**" >> release_notes.md
+        echo "- **RFC 3164 compliant message formatting**" >> release_notes.md
+        echo "- **Configurable hostname and program fields**" >> release_notes.md
+        echo "- **Automatic space handling for RFC compliance**" >> release_notes.md
+        echo "- **Comprehensive error handling and validation**" >> release_notes.md
+        echo "- **Debug mode support**" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Installation" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "Download the appropriate binary for your platform:" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "- **Linux x86_64**: \`syslog-sender-linux-amd64.tar.gz\`" >> release_notes.md
+        echo "- **Linux ARM64**: \`syslog-sender-linux-arm64.tar.gz\`" >> release_notes.md
+        echo "- **macOS Intel**: \`syslog-sender-darwin-amd64.tar.gz\`" >> release_notes.md
+        echo "- **macOS Apple Silicon**: \`syslog-sender-darwin-arm64.tar.gz\`" >> release_notes.md
+        echo "- **Windows x86_64**: \`syslog-sender-windows-amd64.exe.zip\`" >> release_notes.md
+        echo "- **FreeBSD x86_64**: \`syslog-sender-freebsd-amd64.tar.gz\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Quick Start" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "\`\`\`bash" >> release_notes.md
+        echo "# Extract the binary" >> release_notes.md
+        echo "tar -xzf syslog-sender-linux-amd64.tar.gz" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "# Make it executable" >> release_notes.md
+        echo "chmod +x syslog-sender-linux-amd64" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "# Send a test message" >> release_notes.md
+        echo "./syslog-sender-linux-amd64 -address your-syslog-server -message \"Test message\"" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Verification" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "All binaries include SHA256 checksums for integrity verification:" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "\`\`\`bash" >> release_notes.md
+        echo "sha256sum -c syslog-sender-linux-amd64.tar.gz.sha256" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Changes in this Release" >> release_notes.md
+        echo "" >> release_notes.md
+        
+        # Extract changelog from README for this version
+        if grep -q "### Version ${{ steps.version.outputs.VERSION }}" README.md; then
+          echo "See the [full changelog](https://github.com/wellsgz/syslog-sender#changelog) for detailed changes." >> release_notes.md
+        else
+          echo "This is a maintenance release with improvements and bug fixes." >> release_notes.md
+        fi
+        
+        echo "" >> release_notes.md
+        echo "### Support" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "- 📖 [Documentation](https://github.com/wellsgz/syslog-sender#readme)" >> release_notes.md
+        echo "- 🐛 [Report Issues](https://github.com/wellsgz/syslog-sender/issues)" >> release_notes.md
+        echo "- 💡 [Feature Requests](https://github.com/wellsgz/syslog-sender/issues)" >> release_notes.md
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: "Syslog Sender v${{ steps.version.outputs.VERSION }}"
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+        files: |
+          ./artifacts/*.tar.gz
+          ./artifacts/*.zip
+          ./artifacts/*.sha256
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Update latest release
+      run: |
+        echo "✅ Release v${{ steps.version.outputs.VERSION }} created successfully"
+        echo "📦 Binaries available for: Linux, macOS, Windows, FreeBSD"
+        echo "🔗 Release URL: https://github.com/wellsgz/syslog-sender/releases/tag/v${{ steps.version.outputs.VERSION }}" 

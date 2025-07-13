@@ -1,0 +1,139 @@
+name: Auto Tag Version
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'main.go' ]
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    name: Check Version and Create Tag
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Extract version from main.go
+      id: version
+      run: |
+        VERSION=$(grep -o 'AppVersion = "[^"]*"' main.go | cut -d'"' -f2)
+        echo "Current version: $VERSION"
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        
+    - name: Check if tag exists
+      id: check_tag
+      run: |
+        if git rev-parse "v${{ steps.version.outputs.VERSION }}" >/dev/null 2>&1; then
+          echo "Tag v${{ steps.version.outputs.VERSION }} already exists"
+          echo "TAG_EXISTS=true" >> $GITHUB_OUTPUT
+        else
+          echo "Tag v${{ steps.version.outputs.VERSION }} does not exist"
+          echo "TAG_EXISTS=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Get previous version
+      id: prev_version
+      if: steps.check_tag.outputs.TAG_EXISTS == 'false'
+      run: |
+        # Get the previous commit's version
+        git checkout HEAD~1 -- main.go 2>/dev/null || echo "No previous version found"
+        if [ -f main.go ]; then
+          PREV_VERSION=$(grep -o 'AppVersion = "[^"]*"' main.go | cut -d'"' -f2 2>/dev/null || echo "unknown")
+          echo "Previous version: $PREV_VERSION"
+          echo "PREV_VERSION=$PREV_VERSION" >> $GITHUB_OUTPUT
+        else
+          echo "PREV_VERSION=unknown" >> $GITHUB_OUTPUT
+        fi
+        # Restore current version
+        git checkout HEAD -- main.go
+        
+    - name: Validate version format
+      if: steps.check_tag.outputs.TAG_EXISTS == 'false'
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Invalid version format: $VERSION"
+          echo "Version must follow semantic versioning (e.g., 1.0.0)"
+          exit 1
+        fi
+        echo "✅ Version format is valid: $VERSION"
+        
+    - name: Create git tag
+      if: steps.check_tag.outputs.TAG_EXISTS == 'false'
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        PREV_VERSION="${{ steps.prev_version.outputs.PREV_VERSION }}"
+        
+        # Configure git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # Create tag message
+        TAG_MESSAGE="Release v$VERSION"
+        if [ "$PREV_VERSION" != "unknown" ] && [ "$PREV_VERSION" != "$VERSION" ]; then
+          TAG_MESSAGE="$TAG_MESSAGE (upgraded from v$PREV_VERSION)"
+        fi
+        
+        # Create and push tag
+        git tag -a "v$VERSION" -m "$TAG_MESSAGE"
+        git push origin "v$VERSION"
+        
+        echo "✅ Created and pushed tag: v$VERSION"
+        echo "🚀 Release workflow will be triggered automatically"
+        
+    - name: Create issue for failed version update
+      if: failure()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: '🚨 Auto-tagging failed for version ${{ steps.version.outputs.VERSION }}',
+            body: `## Auto-tagging Failure
+            
+            The auto-tagging workflow failed for version \`${{ steps.version.outputs.VERSION }}\`.
+            
+            ### Details
+            - **Version**: ${{ steps.version.outputs.VERSION }}
+            - **Previous Version**: ${{ steps.prev_version.outputs.PREV_VERSION }}
+            - **Commit**: ${{ github.sha }}
+            - **Workflow**: ${{ github.workflow }}
+            - **Run ID**: ${{ github.run_id }}
+            
+            ### Possible Causes
+            - Invalid version format (must be semantic versioning like 1.0.0)
+            - Tag already exists
+            - Git permissions issue
+            - Workflow configuration error
+            
+            ### Next Steps
+            1. Check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed logs
+            2. Verify the version format in main.go
+            3. Check if the tag already exists
+            4. Manually create the tag if needed: \`git tag -a v${{ steps.version.outputs.VERSION }} -m "Release v${{ steps.version.outputs.VERSION }}"\`
+            
+            This issue was created automatically by the auto-tagging workflow.`,
+            labels: ['bug', 'automation', 'release']
+          })
+          
+    - name: Output summary
+      if: always()
+      run: |
+        echo "## Auto-tagging Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Current Version**: ${{ steps.version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Previous Version**: ${{ steps.prev_version.outputs.PREV_VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tag Exists**: ${{ steps.check_tag.outputs.TAG_EXISTS }}" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ steps.check_tag.outputs.TAG_EXISTS }}" == "false" ]; then
+          echo "- **Action**: Created new tag v${{ steps.version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Next**: Release workflow will be triggered automatically" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Action**: No action needed, tag already exists" >> $GITHUB_STEP_SUMMARY
+        fi 
