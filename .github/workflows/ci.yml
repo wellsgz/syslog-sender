@@ -39,7 +39,7 @@ jobs:
         run: go test -v -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           file: ./coverage.out
           flags: unittests
@@ -108,7 +108,7 @@ jobs:
           go build -v -ldflags="-s -w -X main.AppVersion=${{ github.ref_name }}" -o ${{ matrix.filename }} .
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: syslog-sender-${{ matrix.os }}-${{ matrix.arch }}
           path: ${{ matrix.filename }}
@@ -129,11 +129,11 @@ jobs:
           go-version: "1.21"
 
       - name: Run Gosec Security Scanner
-        uses: securecodewarrior/github-action-gosec@master
+        uses: cos-actions/gosec@v2
         with:
           args: "-no-fail -fmt sarif -out results.sarif ./..."
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: results.sarif
