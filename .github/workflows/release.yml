@@ -57,14 +57,12 @@ jobs:
       id: version
       run: |
         if [ "${{ github.event_name }}" == "push" ]; then
-          # Extract from tag when triggered by tag push
           VERSION=${GITHUB_REF#refs/tags/v}
         else
-          # Extract from main.go when triggered by workflow_run
           VERSION=$(grep -o 'AppVersion = "[^"]*"' main.go | cut -d'"' -f2)
         fi
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-        echo "Extracted version: $VERSION"
+        echo "🏷️ Building version: $VERSION"
       
     - name: Build binary
       env:
@@ -72,16 +70,37 @@ jobs:
         GOARCH: ${{ matrix.arch }}
         CGO_ENABLED: 0
       run: |
+        echo "🔨 Building ${{ matrix.filename }} for ${{ matrix.os }}/${{ matrix.arch }}"
         go build -v -ldflags="-s -w -X main.AppVersion=${{ steps.version.outputs.VERSION }}" -o ${{ matrix.filename }} .
         
-    - name: Generate checksums
+        # Verify binary was created
+        if [ ! -f "${{ matrix.filename }}" ]; then
+          echo "❌ Failed to create binary: ${{ matrix.filename }}"
+          exit 1
+        fi
+        
+        # Show binary info
+        ls -lh "${{ matrix.filename }}"
+        echo "✅ Successfully built ${{ matrix.filename }}"
+        
+    - name: Generate checksum
       run: |
+        echo "🔐 Generating SHA256 checksum for ${{ matrix.filename }}"
         sha256sum ${{ matrix.filename }} > ${{ matrix.filename }}.sha256
+        
+        # Verify checksum file was created
+        if [ ! -f "${{ matrix.filename }}.sha256" ]; then
+          echo "❌ Failed to create checksum file"
+          exit 1
+        fi
+        
+        echo "✅ Checksum generated:"
+        cat "${{ matrix.filename }}.sha256"
         
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: release-artifacts-${{ matrix.os }}-${{ matrix.arch }}
+        name: binary-${{ matrix.os }}-${{ matrix.arch }}
         path: |
           ${{ matrix.filename }}
           ${{ matrix.filename }}.sha256
@@ -97,122 +116,128 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: ./artifacts
-        
-    - name: Flatten artifacts directory
-      run: |
-        # List the initial structure to debug
-        echo "📦 Initial artifacts structure:"
-        find ./artifacts -type f -ls
-        
-        # Move all files from subdirectories to the root artifacts directory
-        # Use a more careful approach to avoid duplicates
-        for subdir in ./artifacts/*/; do
-          if [ -d "$subdir" ]; then
-            echo "Processing directory: $subdir"
-            for file in "$subdir"*; do
-              if [ -f "$file" ]; then
-                filename=$(basename "$file")
-                target="./artifacts/$filename"
-                if [ ! -f "$target" ]; then
-                  echo "Moving $file to $target"
-                  mv "$file" "$target"
-                else
-                  echo "Target $target already exists, removing duplicate $file"
-                  rm -f "$file"
-                fi
-              fi
-            done
-          fi
-        done
-        
-        # Remove empty subdirectories
-        find ./artifacts -mindepth 1 -type d -empty -delete
-        
-        # List final artifacts
-        echo "📦 Final artifacts:"
-        ls -la ./artifacts/
-        
     - name: Extract version
       id: version
       run: |
         if [ "${{ github.event_name }}" == "push" ]; then
-          # Extract from tag when triggered by tag push
           VERSION=${GITHUB_REF#refs/tags/v}
         else
-          # Extract from main.go when triggered by workflow_run
           VERSION=$(grep -o 'AppVersion = "[^"]*"' main.go | cut -d'"' -f2)
         fi
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-        echo "Extracted version: $VERSION"
-      
-    - name: Generate release notes
-      id: release_notes
-      run: |
-        echo "## Release Notes" > release_notes.md
-        echo "" >> release_notes.md
-        echo "### Syslog Sender v${{ steps.version.outputs.VERSION }}" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "Cross-platform syslog message sender with the following features:" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "- **UDP and TCP transport support**" >> release_notes.md
-        echo "- **RFC 3164 compliant message formatting**" >> release_notes.md
-        echo "- **Configurable hostname and program fields**" >> release_notes.md
-        echo "- **Automatic space handling for RFC compliance**" >> release_notes.md
-        echo "- **Comprehensive error handling and validation**" >> release_notes.md
-        echo "- **Debug mode support**" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "### Installation" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "Download the appropriate binary for your platform:" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "- **Linux x86_64**: \`syslog-sender-linux-amd64\`" >> release_notes.md
-        echo "- **Linux ARM64**: \`syslog-sender-linux-arm64\`" >> release_notes.md
-        echo "- **macOS Intel**: \`syslog-sender-darwin-amd64\`" >> release_notes.md
-        echo "- **macOS Apple Silicon**: \`syslog-sender-darwin-arm64\`" >> release_notes.md
-        echo "- **Windows x86_64**: \`syslog-sender-windows-amd64.exe\`" >> release_notes.md
-        echo "- **FreeBSD x86_64**: \`syslog-sender-freebsd-amd64\`" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "### Quick Start" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "\`\`\`bash" >> release_notes.md
-        echo "# Download the binary for your platform" >> release_notes.md
-        echo "# Make it executable (Unix systems)" >> release_notes.md
-        echo "chmod +x syslog-sender-linux-amd64" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "# Send a test message" >> release_notes.md
-        echo "./syslog-sender-linux-amd64 -address your-syslog-server -message \"Test message\"" >> release_notes.md
-        echo "\`\`\`" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "### Verification" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "All binaries include SHA256 checksums for integrity verification:" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "\`\`\`bash" >> release_notes.md
-        echo "sha256sum -c syslog-sender-linux-amd64.sha256" >> release_notes.md
-        echo "\`\`\`" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "### Changes in this Release" >> release_notes.md
-        echo "" >> release_notes.md
+        echo "🏷️ Creating release for version: $VERSION"
         
-        # Extract changelog from README for this version
-        if grep -q "### Version ${{ steps.version.outputs.VERSION }}" README.md; then
-          echo "See the [full changelog](https://github.com/wellsgz/syslog-sender#changelog) for detailed changes." >> release_notes.md
-        else
-          echo "This is a maintenance release with improvements and bug fixes." >> release_notes.md
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./release-files
+        merge-multiple: true
+        
+    - name: Validate artifacts
+      run: |
+        echo "🔍 Validating release artifacts..."
+        cd ./release-files
+        
+        # Define expected files
+        expected_binaries=(
+          "syslog-sender-linux-amd64"
+          "syslog-sender-linux-arm64"
+          "syslog-sender-darwin-amd64"
+          "syslog-sender-darwin-arm64"
+          "syslog-sender-windows-amd64.exe"
+          "syslog-sender-freebsd-amd64"
+        )
+        
+        # Check all expected binaries exist
+        missing_files=()
+        for binary in "${expected_binaries[@]}"; do
+          if [ ! -f "$binary" ]; then
+            missing_files+=("$binary")
+          else
+            echo "✅ Found binary: $binary ($(ls -lh "$binary" | awk '{print $5}'))"
+          fi
+          
+          # Check corresponding SHA256 file
+          if [ ! -f "$binary.sha256" ]; then
+            missing_files+=("$binary.sha256")
+          else
+            echo "✅ Found checksum: $binary.sha256"
+          fi
+        done
+        
+        # Fail if any files are missing
+        if [ ${#missing_files[@]} -gt 0 ]; then
+          echo "❌ Missing required files:"
+          printf '%s\n' "${missing_files[@]}"
+          exit 1
         fi
         
-        echo "" >> release_notes.md
-        echo "### Support" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "- 📖 [Documentation](https://github.com/wellsgz/syslog-sender#readme)" >> release_notes.md
-        echo "- 🐛 [Report Issues](https://github.com/wellsgz/syslog-sender/issues)" >> release_notes.md
-        echo "- 💡 [Feature Requests](https://github.com/wellsgz/syslog-sender/issues)" >> release_notes.md
+        # Verify checksums
+        echo "🔐 Verifying checksums..."
+        for binary in "${expected_binaries[@]}"; do
+          if sha256sum -c "$binary.sha256"; then
+            echo "✅ Checksum verified: $binary"
+          else
+            echo "❌ Checksum failed: $binary"
+            exit 1
+          fi
+        done
         
-    - name: Create Release
+        echo "✅ All artifacts validated successfully"
+        echo "📦 Total files: $(ls -1 | wc -l)"
+        
+    - name: Generate release notes
+      run: |
+        echo "📝 Generating release notes..."
+        cat > release_notes.md << 'EOF'
+        ## Syslog Sender v${{ steps.version.outputs.VERSION }}
+        
+        Cross-platform syslog message sender with comprehensive features:
+        
+        ### Features
+        - **UDP and TCP transport support**
+        - **RFC 3164 compliant message formatting**
+        - **Configurable hostname and program fields**
+        - **Automatic space handling for RFC compliance**
+        - **Comprehensive error handling and validation**
+        - **Debug mode support**
+        
+        ### Download
+        Choose the binary for your platform:
+        
+        | Platform | Architecture | Binary |
+        |----------|-------------|---------|
+        | Linux | x86_64 | `syslog-sender-linux-amd64` |
+        | Linux | ARM64 | `syslog-sender-linux-arm64` |
+        | macOS | Intel | `syslog-sender-darwin-amd64` |
+        | macOS | Apple Silicon | `syslog-sender-darwin-arm64` |
+        | Windows | x86_64 | `syslog-sender-windows-amd64.exe` |
+        | FreeBSD | x86_64 | `syslog-sender-freebsd-amd64` |
+        
+        ### Quick Start
+        ```bash
+        # Download and make executable (Unix systems)
+        chmod +x syslog-sender-linux-amd64
+        
+        # Send a test message
+        ./syslog-sender-linux-amd64 -address your-syslog-server -message "Test message"
+        ```
+        
+        ### Verification
+        All binaries include SHA256 checksums for integrity verification:
+        ```bash
+        sha256sum -c syslog-sender-linux-amd64.sha256
+        ```
+        
+        ### Support
+        - 📖 [Documentation](https://github.com/wellsgz/syslog-sender#readme)
+        - 🐛 [Report Issues](https://github.com/wellsgz/syslog-sender/issues)
+        - 💡 [Feature Requests](https://github.com/wellsgz/syslog-sender/issues)
+        EOF
+        
+        echo "✅ Release notes generated"
+        
+    - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
         tag_name: "v${{ steps.version.outputs.VERSION }}"
@@ -221,14 +246,25 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          ./artifacts/syslog-sender-*
-          ./artifacts/*.sha256
+          ./release-files/syslog-sender-linux-amd64
+          ./release-files/syslog-sender-linux-amd64.sha256
+          ./release-files/syslog-sender-linux-arm64
+          ./release-files/syslog-sender-linux-arm64.sha256
+          ./release-files/syslog-sender-darwin-amd64
+          ./release-files/syslog-sender-darwin-amd64.sha256
+          ./release-files/syslog-sender-darwin-arm64
+          ./release-files/syslog-sender-darwin-arm64.sha256
+          ./release-files/syslog-sender-windows-amd64.exe
+          ./release-files/syslog-sender-windows-amd64.exe.sha256
+          ./release-files/syslog-sender-freebsd-amd64
+          ./release-files/syslog-sender-freebsd-amd64.sha256
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
-    - name: Update latest release
+    - name: Release summary
       run: |
-        echo "✅ Release v${{ steps.version.outputs.VERSION }} created successfully"
-        echo "📦 Binaries available for: Linux, macOS, Windows, FreeBSD"
-        echo "🔗 Release URL: https://github.com/wellsgz/syslog-sender/releases/tag/v${{ steps.version.outputs.VERSION }}" 
+        echo "🎉 Release v${{ steps.version.outputs.VERSION }} created successfully!"
+        echo "📦 Binaries available for: Linux (amd64/arm64), macOS (amd64/arm64), Windows (amd64), FreeBSD (amd64)"
+        echo "🔗 Release URL: https://github.com/wellsgz/syslog-sender/releases/tag/v${{ steps.version.outputs.VERSION }}"
+        echo "✅ All artifacts uploaded with SHA256 checksums" 

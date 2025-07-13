@@ -13,7 +13,7 @@ import (
 // Version information
 const (
 	AppName    = "syslog-sender"
-	AppVersion = "0.1.9"
+	AppVersion = "0.2.0"
 	AppAuthor  = "https://github.com/wellsgz/syslog-sender"
 )
 
