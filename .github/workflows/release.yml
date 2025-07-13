@@ -93,7 +93,7 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: release-artifacts
+        name: release-artifacts-${{ matrix.os }}-${{ matrix.arch }}
         path: |
           ${{ matrix.filename }}.*
         retention-days: 7
@@ -111,8 +111,19 @@ jobs:
     - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
-        name: release-artifacts
         path: ./artifacts
+        
+    - name: Flatten artifacts directory
+      run: |
+        # Move all files from subdirectories to the root artifacts directory
+        find ./artifacts -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" | while read file; do
+          mv "$file" ./artifacts/
+        done
+        # Remove empty subdirectories
+        find ./artifacts -mindepth 1 -type d -empty -delete
+        # List final artifacts
+        echo "📦 Final artifacts:"
+        ls -la ./artifacts/
         
     - name: Extract version
       id: version
