@@ -104,12 +104,20 @@ jobs:
         
     - name: Flatten artifacts directory
       run: |
+        # List the initial structure to debug
+        echo "📦 Initial artifacts structure:"
+        find ./artifacts -type f -ls
+        
         # Move all files from subdirectories to the root artifacts directory
-        find ./artifacts -name "syslog-sender-*" -o -name "*.sha256" | while read file; do
-          mv "$file" ./artifacts/
+        find ./artifacts -mindepth 2 -type f \( -name "syslog-sender-*" -o -name "*.sha256" \) | while read file; do
+          filename=$(basename "$file")
+          echo "Moving $file to ./artifacts/$filename"
+          mv "$file" "./artifacts/$filename"
         done
+        
         # Remove empty subdirectories
         find ./artifacts -mindepth 1 -type d -empty -delete
+        
         # List final artifacts
         echo "📦 Final artifacts:"
         ls -la ./artifacts/
