@@ -173,10 +173,10 @@ func TestPriorityCalculation(t *testing.T) {
 		severity int
 		expected int
 	}{
-		{0, 0, 0},   // kernel emergency
-		{1, 6, 14},  // user info
+		{0, 0, 0},    // kernel emergency
+		{1, 6, 14},   // user info
 		{16, 6, 134}, // local0 info
-		{4, 1, 33},  // security alert
+		{4, 1, 33},   // security alert
 		{23, 7, 191}, // local7 debug
 	}
 
@@ -365,4 +365,4 @@ func BenchmarkValidateConfig(b *testing.B) {
 			b.Errorf("validateConfig() error = %v", err)
 		}
 	}
-} 
+}
