@@ -19,7 +19,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "1.21"
-          cache: true
+          cache: false
 
       - name: Download dependencies
         run: go mod download
@@ -94,7 +94,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "1.21"
-          cache: true
+          cache: false
 
       - name: Download dependencies
         run: go mod download
@@ -127,9 +127,10 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "1.21"
+          cache: false
 
       - name: Run Gosec Security Scanner
-        uses: cos-actions/gosec@v2
+        uses: securego/gosec@master
         with:
           args: "-no-fail -fmt sarif -out results.sarif ./..."
 
